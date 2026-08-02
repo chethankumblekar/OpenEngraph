@@ -214,14 +214,15 @@ dist/
 
 **Important cross-task note carried forward:** every later task that imports `@openengraph/core/<subpath>` from *outside* the `core` package (Tasks 9, 10, 11) requires `core` to have been built first (`npm run build -w core`), because these are real runtime imports resolved through the `exports` map above against `core/dist/`, not through vitest's on-the-fly TS transpilation (which only applies to relative imports within the same package's own test files). Tasks 2-8's tests stay within `core` itself via relative imports (`../../src/...`) and are unaffected. Task 5/12/13's plugins only ever `import type` from `@openengraph/core/plugins/types.js` — type-only imports are erased at compile time, so they never trigger this at runtime.
 
-`core/tsconfig.json`:
+`core/tsconfig.json` — `outDir` must be set explicitly here, not just inherited from `tsconfig.base.json`: TypeScript resolves a relative `outDir` inherited via `extends` relative to the directory of the config file that *declares* it (the repo root), not the extending config's directory, so without this override `tsc -p core/tsconfig.json` silently emits to `<repo-root>/dist` instead of `core/dist`, breaking the package's `exports` map, which points at `./dist/index.js` relative to `core/package.json`:
 ```json
 {
   "extends": "../tsconfig.base.json",
   "include": ["src"],
-  "compilerOptions": { "rootDir": "src" }
+  "compilerOptions": { "rootDir": "src", "outDir": "dist" }
 }
 ```
+Every other package's `tsconfig.json` in this plan (`cli`, `server`, and each plugin) follows this exact same shape (adjusting only the `extends` relative path and the number of `../`) — always set `outDir` explicitly, never rely on inheriting it.
 
 `core/src/version.ts`:
 ```typescript
@@ -709,12 +710,12 @@ Expected: FAIL — package/plugin does not exist yet.
 }
 ```
 
-`plugins/typescript/tsconfig.json` — same pattern as `core/tsconfig.json`:
+`plugins/typescript/tsconfig.json` — same pattern as `core/tsconfig.json`, including the explicit `outDir` (see that section for why it can't just be inherited):
 ```json
 {
   "extends": "../../tsconfig.base.json",
   "include": ["src"],
-  "compilerOptions": { "rootDir": "src" }
+  "compilerOptions": { "rootDir": "src", "outDir": "dist" }
 }
 ```
 
