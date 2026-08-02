@@ -99,7 +99,7 @@ openengraph/
 - Create: `vitest.config.ts`
 - Create: `.gitignore`
 - Create: `LICENSE`
-- Create: `core/package.json`, `core/tsconfig.json`, `core/src/version.ts`
+- Create: `core/package.json`, `core/tsconfig.json`, `core/src/version.ts`, `core/src/index.ts`
 - Test: `core/test/version.test.ts`
 
 **Interfaces:**
@@ -183,7 +183,7 @@ dist/
 
 - [ ] **Step 4: Create the `core` package and version export**
 
-`core/package.json`:
+`core/package.json`. The `exports` map is defined in full now, even though most of these files don't exist until later tasks — later tasks (2-8) add the files these entries point to, but never need to touch this map again:
 ```json
 {
   "name": "@openengraph/core",
@@ -192,12 +192,27 @@ dist/
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./storage/db.js": "./dist/storage/db.js",
+    "./storage/schema.js": "./dist/storage/schema.js",
+    "./index/changeDetector.js": "./dist/index/changeDetector.js",
+    "./plugins/types.js": "./dist/plugins/types.js",
+    "./plugins/loader.js": "./dist/plugins/loader.js",
+    "./graph/builder.js": "./dist/graph/builder.js",
+    "./embeddings/index.js": "./dist/embeddings/index.js",
+    "./embeddings/similarity.js": "./dist/embeddings/similarity.js",
+    "./query/router.js": "./dist/query/router.js",
+    "./query/types.js": "./dist/query/types.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
   }
 }
 ```
+
+**Important cross-task note carried forward:** every later task that imports `@openengraph/core/<subpath>` from *outside* the `core` package (Tasks 9, 10, 11) requires `core` to have been built first (`npm run build -w core`), because these are real runtime imports resolved through the `exports` map above against `core/dist/`, not through vitest's on-the-fly TS transpilation (which only applies to relative imports within the same package's own test files). Tasks 2-8's tests stay within `core` itself via relative imports (`../../src/...`) and are unaffected. Task 5/12/13's plugins only ever `import type` from `@openengraph/core/plugins/types.js` — type-only imports are erased at compile time, so they never trigger this at runtime.
 
 `core/tsconfig.json`:
 ```json
@@ -211,6 +226,11 @@ dist/
 `core/src/version.ts`:
 ```typescript
 export const VERSION = '0.1.0';
+```
+
+`core/src/index.ts` — the package's `.` export target; re-exports grow here as later tasks add modules (Task 8 adds `QueryRouter`, the main type consumers need):
+```typescript
+export { VERSION } from './version.js';
 ```
 
 - [ ] **Step 5: Install dependencies and run test to verify it passes**
@@ -620,7 +640,7 @@ git commit -m "feat(core): add plugin interface, manifest validation, and govern
 ### Task 5: TypeScript Language Plugin
 
 **Files:**
-- Create: `plugins/typescript/package.json`, `plugins/typescript/plugin.json`
+- Create: `plugins/typescript/package.json`, `plugins/typescript/tsconfig.json`, `plugins/typescript/plugin.json`
 - Create: `plugins/typescript/src/index.ts`
 - Create (binary, via `npm install`/postinstall script, see Step 3): `plugins/typescript/grammar/tree-sitter-typescript.wasm`
 - Test: `plugins/typescript/test/index.test.ts`
@@ -670,19 +690,31 @@ Expected: FAIL — package/plugin does not exist yet.
 
 - [ ] **Step 3: Scaffold the package and fetch the grammar**
 
-`plugins/typescript/package.json`:
+`plugins/typescript/package.json` — note the `build` script: `loadPlugin` (Task 4) dynamically imports `dist/index.js`, so every plugin package needs the same compile-to-`dist` step as `core`/`cli`/`server`:
 ```json
 {
   "name": "@openengraph/plugin-typescript",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "type": "module",
+  "main": "dist/index.js",
   "dependencies": {
     "web-tree-sitter": "^0.24.0"
   },
   "scripts": {
-    "postinstall": "node scripts/fetch-grammar.mjs"
+    "postinstall": "node scripts/fetch-grammar.mjs",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
   }
+}
+```
+
+`plugins/typescript/tsconfig.json` — same pattern as `core/tsconfig.json`:
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"],
+  "compilerOptions": { "rootDir": "src" }
 }
 ```
 
@@ -767,7 +799,14 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
 Run: `npm test -w plugins/typescript`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Build the plugin and verify the compiled entry exists**
+
+`loadPlugin` (Task 4, used by the CLI in Task 9) imports `dist/index.js`, not `src/index.ts` — the vitest run above transpiles TS on the fly for the test file, but that does not produce a `dist/` folder, so this step is required for the plugin to be usable outside its own test suite.
+
+Run: `npm run build -w plugins/typescript`
+Expected: exits 0 and creates `plugins/typescript/dist/index.js`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add plugins/typescript
@@ -1183,14 +1222,18 @@ git commit -m "feat(core): add QueryRouter with structural, semantic, and hybrid
 
 **Files:**
 - Create: `cli/package.json`, `cli/tsconfig.json`
-- Create: `cli/src/index.ts`, `cli/src/commands/index.ts`
+- Create: `cli/src/index.ts`, `cli/src/commands/index.ts`, `cli/src/plugins.ts`
 - Test: `cli/test/commands/index.test.ts`
 
 **Interfaces:**
 - Consumes: `openDatabase`/`applySchema` (Task 2), `detectChangedFiles` (Task 3), `loadPlugin` (Task 4), `buildGraph` (Task 6), `indexNodeChunks` (Task 7), from `@openengraph/core`.
-- Produces: `runIndex(repoPath: string, pluginDirs: string[]): Promise<{ filesIndexed: number }>` in `cli/src/commands/index.ts`, wired to `openengraph index <path>` in `cli/src/index.ts`.
+- Produces:
+  - `runIndex(repoPath: string, pluginDirs: string[]): Promise<{ filesIndexed: number }>` in `cli/src/commands/index.ts`, wired to `openengraph index <path>` in `cli/src/index.ts`.
+  - `resolveInstalledPluginDirs(): string[]` in `cli/src/plugins.ts` — Tasks 12 and 13 rely on this existing so their plugins are picked up automatically once installed, without any change to this task's files.
 
 - [ ] **Step 1: Write the failing test**
+
+`pluginDirs` passed to `runIndex` are always absolute directories (either resolved by `resolveInstalledPluginDirs()` in production, or computed relative to this test file's own location below — never relative to `repoPath`, which is an unrelated temp directory created per test run):
 
 `cli/test/commands/index.test.ts`:
 ```typescript
@@ -1198,8 +1241,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runIndex } from '../../src/commands/index.js';
+
+const typescriptPluginDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../plugins/typescript');
 
 describe('runIndex', () => {
   let repoPath: string;
@@ -1212,7 +1258,7 @@ describe('runIndex', () => {
     writeFileSync(join(repoPath, 'a.ts'), 'export function greet() { return 1; }');
     execSync('git add a.ts', { cwd: repoPath });
 
-    const result = await runIndex(repoPath, ['../../plugins/typescript']);
+    const result = await runIndex(repoPath, [typescriptPluginDir]);
 
     expect(result.filesIndexed).toBe(1);
     expect(existsSync(join(repoPath, '.openengraph', 'graph.db'))).toBe(true);
@@ -1225,7 +1271,11 @@ describe('runIndex', () => {
 Run: `npm test -w cli`
 Expected: FAIL — `cli` package/command does not exist.
 
-- [ ] **Step 3: Scaffold the `cli` package**
+- [ ] **Step 3: Build prerequisites, then scaffold the `cli` package**
+
+This task's test exercises `@openengraph/core` and `@openengraph/plugin-typescript` through real (non-type) imports, resolved through their `exports` maps against each package's compiled `dist/` — not through vitest's on-the-fly TS transpilation, which only covers `cli`'s own source. Build both first:
+
+Run: `npm run build -w core && npm run build -w plugins/typescript`
 
 `cli/package.json`:
 ```json
@@ -1262,7 +1312,9 @@ export async function runIndex(repoPath: string, pluginDirs: string[]): Promise<
   const db = openDatabase(join(repoPath, '.openengraph', 'graph.db'));
   applySchema(db);
 
-  const plugins = await Promise.all(pluginDirs.map((dir) => loadPlugin(join(repoPath, dir))));
+  // pluginDirs are always absolute — do not join with repoPath, which is the
+  // *indexed* repo, an unrelated directory from wherever plugins are installed.
+  const plugins = await Promise.all(pluginDirs.map((dir) => loadPlugin(dir)));
   const { changed } = detectChangedFiles(repoPath, db);
 
   let filesIndexed = 0;
@@ -1280,11 +1332,43 @@ export async function runIndex(repoPath: string, pluginDirs: string[]): Promise<
 }
 ```
 
+`cli/src/plugins.ts`:
+```typescript
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
+
+const require = createRequire(import.meta.url);
+
+// Every flagship plugin package this CLI knows about. Tasks 12 and 13 add
+// @openengraph/plugin-python and @openengraph/plugin-go as explicit cli
+// dependencies once those packages exist — until then, resolution below
+// simply skips whichever of these aren't installed yet, so this file does
+// not need to change again when those tasks land.
+const KNOWN_PLUGIN_PACKAGES = [
+  '@openengraph/plugin-typescript',
+  '@openengraph/plugin-python',
+  '@openengraph/plugin-go'
+];
+
+export function resolveInstalledPluginDirs(): string[] {
+  const dirs: string[] = [];
+  for (const pkg of KNOWN_PLUGIN_PACKAGES) {
+    try {
+      dirs.push(dirname(require.resolve(`${pkg}/package.json`)));
+    } catch {
+      // Not installed yet (e.g. python/go plugins before Tasks 12/13) — skip.
+    }
+  }
+  return dirs;
+}
+```
+
 `cli/src/index.ts`:
 ```typescript
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { runIndex } from './commands/index.js';
+import { resolveInstalledPluginDirs } from './plugins.js';
 
 const program = new Command();
 program.name('openengraph').version('0.1.0');
@@ -1293,7 +1377,7 @@ program
   .command('index <path>')
   .description('Index a repository into a local structural + embedding graph')
   .action(async (path: string) => {
-    const result = await runIndex(path, []); // plugin resolution wired in Task 12/13 packaging
+    const result = await runIndex(path, resolveInstalledPluginDirs());
     console.log(`Indexed ${result.filesIndexed} file(s).`);
   });
 
@@ -1318,12 +1402,16 @@ git commit -m "feat(cli): add openengraph index command"
 
 **Files:**
 - Create: `server/package.json`, `server/tsconfig.json`
-- Create: `server/src/mcpServer.ts`
+- Create: `server/src/mcpServer.ts`, `server/src/index.ts`
 - Test: `server/test/mcpServer.test.ts`
 
 **Interfaces:**
-- Consumes: `QueryRouter` (Task 8), `openDatabase` (Task 2).
-- Produces: `createMcpServer(dbPath: string): McpServer` exposing three tools: `graph_query` (wraps `structuralQuery`), `semantic_search` (wraps `semanticQuery`), `hybrid_query` (wraps `hybridQuery`); and `startStdioServer(dbPath: string): Promise<void>` that connects it over `StdioServerTransport`.
+- Consumes: `QueryRouter` (Task 8), `openDatabase`/`applySchema` (Task 2) — both from `@openengraph/core`.
+- Produces: `createMcpServer(db: Database.Database): McpServer` exposing three tools: `graph_query` (wraps `structuralQuery`), `semantic_search` (wraps `semanticQuery`), `hybrid_query` (wraps `hybridQuery`); and `startStdioServer(db: Database.Database): Promise<void>` that connects it over `StdioServerTransport`. Both take an already-open `Database` handle, not a path — Task 11's `runMcp` is what owns opening the file at `.openengraph/graph.db` and passes the handle in.
+
+This task's test exercises `@openengraph/core` through real (non-type) imports, resolved against its compiled `dist/`. Build it first:
+
+Run: `npm run build -w core`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1354,20 +1442,28 @@ Expected: FAIL — `server` package/module does not exist.
 
 - [ ] **Step 3: Scaffold the `server` package**
 
-`server/package.json`:
+`server/package.json` — `main`/`build` follow the same pattern as `core` (Task 1), since Task 11's `cli` imports this package by its bare name, not a subpath:
 ```json
 {
   "name": "@openengraph/server",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "dependencies": {
     "@openengraph/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
   }
 }
 ```
+
+`server/tsconfig.json`: same pattern as `core/tsconfig.json`.
 
 - [ ] **Step 4: Implement `mcpServer.ts`**
 
@@ -1410,12 +1506,24 @@ export async function startStdioServer(db: Database.Database): Promise<void> {
 
 *Note: if the installed `@modelcontextprotocol/sdk` version doesn't expose `server.listTools()`, add a thin wrapper in `mcpServer.ts` that tracks registered tool names in a local array as each `server.tool(...)` call is made, and expose that array via a `listRegisteredTools()` export instead — adjust the test import accordingly. Verify against the installed SDK's actual API surface (`node_modules/@modelcontextprotocol/sdk/dist/server/mcp.d.ts`) before finalizing this task.*
 
+`server/src/index.ts` — the package's `main` entry point; Task 11's `cli` package imports `startStdioServer` from `@openengraph/server` (the bare package name), which resolves here:
+```typescript
+export { createMcpServer, startStdioServer } from './mcpServer.js';
+```
+
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `npm test -w server`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Build the package**
+
+Task 11's `cli` package imports `@openengraph/server` by its bare name, resolved through `main` against compiled `dist/` — build it now so Task 11 doesn't hit a missing-module error.
+
+Run: `npm run build -w server`
+Expected: exits 0 and creates `server/dist/index.js`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add server
@@ -1457,6 +1565,12 @@ describe('runMcp', () => {
 
 Run: `npm test -w cli`
 Expected: FAIL — `commands/mcp.js` not found.
+
+- [ ] **Step 2.5: Build prerequisites**
+
+This test exercises `@openengraph/core` and `@openengraph/server` through real imports resolved against their compiled `dist/`.
+
+Run: `npm run build -w core && npm run build -w server`
 
 - [ ] **Step 3: Implement `commands/mcp.ts` and wire it into the CLI**
 
@@ -1501,7 +1615,7 @@ git commit -m "feat(cli): add openengraph mcp command"
 ### Task 12: Python Language Plugin
 
 **Files:**
-- Create: `plugins/python/package.json`, `plugins/python/plugin.json`, `plugins/python/scripts/fetch-grammar.mjs`
+- Create: `plugins/python/package.json`, `plugins/python/tsconfig.json`, `plugins/python/plugin.json`, `plugins/python/scripts/fetch-grammar.mjs`
 - Create: `plugins/python/src/index.ts`
 - Test: `plugins/python/test/index.test.ts`
 
@@ -1563,10 +1677,26 @@ and identical capture-to-`ExtractedEntity` mapping logic as Task 5.
 Run: `npm test -w plugins/python`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Build the plugin and verify the compiled entry exists**
+
+Same reasoning as Task 5 Step 6 — `loadPlugin` requires `dist/index.js`.
+
+Run: `npm run build -w plugins/python`
+Expected: exits 0 and creates `plugins/python/dist/index.js`.
+
+- [ ] **Step 7: Add this plugin as an explicit `cli` dependency**
+
+In `cli/package.json`, add `"@openengraph/plugin-python": "workspace:*"` to `dependencies` (alongside the existing `@openengraph/plugin-typescript` entry). This is not strictly required for `cli/src/plugins.ts`'s `require.resolve` to find the package (npm workspaces hoist all workspace packages into the root `node_modules` regardless), but an explicit dependency documents the real relationship instead of relying on incidental hoisting — undeclared-but-resolvable dependencies are exactly what a code reviewer should flag. Run `npm install` at the repo root afterward.
+
+- [ ] **Step 8: Run the cli test suite to confirm nothing broke**
+
+Run: `npm test -w cli`
+Expected: PASS — `resolveInstalledPluginDirs()` now also returns the python plugin's directory.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add plugins/python
+git add plugins/python cli/package.json package-lock.json
 git commit -m "feat(plugins): add Python language plugin"
 ```
 
@@ -1575,7 +1705,7 @@ git commit -m "feat(plugins): add Python language plugin"
 ### Task 13: Go Language Plugin
 
 **Files:**
-- Create: `plugins/go/package.json`, `plugins/go/plugin.json`, `plugins/go/scripts/fetch-grammar.mjs`
+- Create: `plugins/go/package.json`, `plugins/go/tsconfig.json`, `plugins/go/plugin.json`, `plugins/go/scripts/fetch-grammar.mjs`
 - Create: `plugins/go/src/index.ts`
 - Test: `plugins/go/test/index.test.ts`
 
@@ -1638,10 +1768,26 @@ const query = language.query(`
 Run: `npm test -w plugins/go`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Build the plugin and verify the compiled entry exists**
+
+Same reasoning as Task 5 Step 6 — `loadPlugin` requires `dist/index.js`.
+
+Run: `npm run build -w plugins/go`
+Expected: exits 0 and creates `plugins/go/dist/index.js`.
+
+- [ ] **Step 7: Add this plugin as an explicit `cli` dependency**
+
+In `cli/package.json`, add `"@openengraph/plugin-go": "workspace:*"` to `dependencies` (alongside `@openengraph/plugin-typescript` and `@openengraph/plugin-python`). Same rationale as Task 12 Step 7. Run `npm install` at the repo root afterward.
+
+- [ ] **Step 8: Run the cli test suite to confirm nothing broke**
+
+Run: `npm test -w cli`
+Expected: PASS — `resolveInstalledPluginDirs()` now returns all three plugin directories.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add plugins/go
+git add plugins/go cli/package.json package-lock.json
 git commit -m "feat(plugins): add Go language plugin"
 ```
 
@@ -1683,23 +1829,27 @@ func Greet(name string) string {
 
 - [ ] **Step 2: Write the failing integration test**
 
-`core/test/integration/e2e.test.ts`:
+`core/test/integration/e2e.test.ts` — this is a native ESM module (`"type": "module"` throughout the monorepo, per Global Constraints), so `__dirname` is not available; plugin and fixture paths are computed from `import.meta.url` instead, exactly like the fix applied to Task 9's test:
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'node:child_process';
 import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runIndex } from '../../../cli/src/commands/index.js';
 import { openDatabase } from '../../src/storage/db.js';
 import { QueryRouter } from '../../src/query/router.js';
+
+const testDir = dirname(fileURLToPath(import.meta.url)); // core/test/integration
+const monorepoRoot = resolve(testDir, '..', '..', '..'); // -> core/test -> core -> repo root
 
 describe('end-to-end indexing and querying', () => {
   let repoPath: string;
 
   beforeAll(() => {
     repoPath = mkdtempSync(join(tmpdir(), 'oe-e2e-'));
-    cpSync(join(__dirname, '..', 'fixtures', 'sample-repo'), repoPath, { recursive: true });
+    cpSync(resolve(testDir, '..', 'fixtures', 'sample-repo'), repoPath, { recursive: true });
     execSync('git init -q && git add -A', { cwd: repoPath });
   });
 
@@ -1707,9 +1857,9 @@ describe('end-to-end indexing and querying', () => {
 
   it('indexes all three languages and answers a hybrid query', async () => {
     const result = await runIndex(repoPath, [
-      '../../../plugins/typescript',
-      '../../../plugins/python',
-      '../../../plugins/go'
+      join(monorepoRoot, 'plugins', 'typescript'),
+      join(monorepoRoot, 'plugins', 'python'),
+      join(monorepoRoot, 'plugins', 'go')
     ]);
     expect(result.filesIndexed).toBe(3);
 
@@ -1723,6 +1873,8 @@ describe('end-to-end indexing and querying', () => {
 ```
 
 - [ ] **Step 3: Run test to verify it fails (or passes if all prior tasks are correctly wired)**
+
+By this point in the task sequence, `core`, `server`, and all three plugins have already been built by their own tasks (Task 5/12/13 build the plugins, Task 9 builds `core`, Task 10 builds `server`) and nothing since has changed their sources, so no additional build step is needed here — if this assumption is wrong (e.g. a fix-round in an earlier task edited `core` source after its last build), rebuild the affected package before proceeding.
 
 Run: `npm test -w core`
 Expected: If Tasks 1-13 are complete and correctly wired, this should PASS on first run — it is a verification task, not new functionality. If it FAILS, the failure identifies an integration bug (e.g. plugin path resolution, manifest mismatch) to fix before proceeding — do not modify the test to make it pass; fix the underlying wiring.
@@ -1885,3 +2037,4 @@ git commit -m "docs: update foundation spec for hybrid retrieval and open-core m
 - **Spec coverage**: Section 3 (router) → Task 8; Section 4 (repo/licensing) → Tasks 1, 4; Section 5 (OSS MVP) → Tasks 2-14; Section 6 (enterprise roadmap) → intentionally out of scope, referenced only in Task 16 doc edit; Section 7 (positioning doc) → Task 15; Section 8 (spec edits) → Task 16; Section 9 open questions → resolved concretely in Global Constraints and Task 4 rather than left open.
 - **Type consistency checked**: `ExtractedEntity`/`PluginManifest`/`LanguagePlugin` (Task 4) used identically in Tasks 5, 6, 9, 12, 13. `GraphResult` (Task 8) used identically in Task 10. `QueryRouter` method names (`structuralQuery`/`semanticQuery`/`hybridQuery`) match between Task 8's implementation and Task 10's MCP tool wiring.
 - **Known risk flagged in-line**: Task 10 includes an explicit note to verify the installed `@modelcontextprotocol/sdk` version's actual tool-listing API before finalizing, since MCP SDK APIs have changed across versions — this is the one spot where the plan asks the implementer to verify against the real installed package rather than assuming an exact signature.
+- **Pre-flight fixes applied (2026-08-02, before Task 1 dispatch)**: this plan was amended after its initial self-review missed several cross-task wiring defects, caught during SDD's mandatory pre-flight conflict scan: (1) Task 9's CLI action originally called `runIndex(path, [])` with a dangling "wired in Task 12/13" comment that no later task actually addressed — replaced with real plugin auto-discovery (`cli/src/plugins.ts`); (2) `core/package.json` (Task 1) was missing the `exports` map needed for the `@openengraph/core/<subpath>` imports used in Tasks 9-11 to resolve at all — added, plus the `core/src/index.ts` entry it points to; (3) plugin packages (Tasks 5/12/13) had no build step, but `loadPlugin` requires their compiled `dist/index.js` — added `tsconfig.json`/build steps to all three; (4) Task 9's `runIndex` incorrectly ran `join(repoPath, dir)` on already-absolute plugin directories, and its test's `'../../plugins/typescript'` string was relative to the wrong base — both fixed, matching pattern reused in Task 14; (5) Task 10's Interfaces line documented `createMcpServer(dbPath: string)` while the actual code takes a `Database` handle — corrected; (6) `@openengraph/server` (Task 10) had no `main` entry or barrel file for Task 11's bare `from '@openengraph/server'` import — added `server/src/index.ts` and `main` field; (7) Task 14's e2e test used `__dirname`, unavailable in this monorepo's native-ESM modules, and the same stale relative plugin-path pattern as (4) — both fixed. Tasks 9, 10, 11 also gained explicit "build core/server/plugins first" steps, since their tests are the first to cross package boundaries via real (non-type) imports that vitest's on-the-fly transpilation doesn't cover.
