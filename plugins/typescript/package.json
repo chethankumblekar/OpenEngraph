@@ -1,0 +1,18 @@
+{
+  "name": "@openengraph/plugin-typescript",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "dependencies": {
+    "web-tree-sitter": "^0.24.0"
+  },
+  "devDependencies": {
+    "tree-sitter-typescript": "^0.23.2"
+  },
+  "scripts": {
+    "postinstall": "node scripts/fetch-grammar.mjs",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}

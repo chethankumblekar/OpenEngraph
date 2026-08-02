@@ -1,0 +1,6 @@
+{
+  "name": "@openengraph/plugin-typescript",
+  "language": "typescript",
+  "extensions": [".ts", ".tsx"],
+  "grammar": "grammar/tree-sitter-typescript.wasm"
+}
