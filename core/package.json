@@ -1,0 +1,25 @@
+{
+  "name": "@openengraph/core",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./storage/db.js": "./dist/storage/db.js",
+    "./storage/schema.js": "./dist/storage/schema.js",
+    "./index/changeDetector.js": "./dist/index/changeDetector.js",
+    "./plugins/types.js": "./dist/plugins/types.js",
+    "./plugins/loader.js": "./dist/plugins/loader.js",
+    "./graph/builder.js": "./dist/graph/builder.js",
+    "./embeddings/index.js": "./dist/embeddings/index.js",
+    "./embeddings/similarity.js": "./dist/embeddings/similarity.js",
+    "./query/router.js": "./dist/query/router.js",
+    "./query/types.js": "./dist/query/types.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}

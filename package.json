@@ -1,0 +1,14 @@
+{
+  "name": "openengraph",
+  "private": true,
+  "type": "module",
+  "workspaces": ["core", "cli", "server", "plugins/*"],
+  "scripts": {
+    "test": "vitest run",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
