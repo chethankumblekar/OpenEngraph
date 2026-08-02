@@ -532,7 +532,7 @@ git commit -m "feat(core): add git-aware change detector"
     }
     ```
   - `validateManifest(manifest: unknown): PluginManifest` — throws `Error` with a specific message if a required field is missing or wrong type.
-  - `loadPlugin(pluginDir: string): Promise<LanguagePlugin>` — reads `plugin.json`, validates it, dynamically imports `src/index.js` from that dir, and returns the plugin (the imported module must default-export a function `(manifest: PluginManifest) => LanguagePlugin`).
+  - `loadPlugin(pluginDir: string): Promise<LanguagePlugin>` — reads `plugin.json`, validates it, dynamically imports the plugin's **compiled** `dist/index.js` from that dir (see the code block in Step 3 below — plugins are built, not run from `src/`, exactly like `core`/`cli`/`server`), and returns the plugin (the imported module must default-export a function `(manifest: PluginManifest) => LanguagePlugin`).
 
 - [ ] **Step 1: Write the failing test**
 
