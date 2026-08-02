@@ -1,0 +1,15 @@
+{
+  "name": "@openengraph/cli",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": { "openengraph": "dist/index.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@openengraph/core": "*",
+    "commander": "^12.0.0"
+  }
+}
