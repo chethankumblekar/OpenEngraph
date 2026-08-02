@@ -1,5 +1,13 @@
-import { pipeline, type FeatureExtractionPipeline } from '@xenova/transformers';
+import { env, pipeline, type FeatureExtractionPipeline } from '@xenova/transformers';
 import type Database from 'better-sqlite3';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+// Machine-global cache (not repo- or node_modules-scoped): embedText() takes
+// no repoPath, is shared core infrastructure used across any repo indexed on
+// this machine, and must survive `rm -rf node_modules`, fresh checkouts, and
+// Docker rebuilds without re-downloading the model each time.
+env.cacheDir = path.join(os.homedir(), '.openengraph', 'models');
 
 let extractorPromise: Promise<FeatureExtractionPipeline> | undefined;
 async function getExtractor(): Promise<FeatureExtractionPipeline> {
