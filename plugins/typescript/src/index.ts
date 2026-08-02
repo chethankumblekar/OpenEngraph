@@ -26,6 +26,7 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
 
       const query = language.query(`
         (function_declaration name: (identifier) @func.name) @func.decl
+        (class_declaration name: (type_identifier) @class.name) @class.decl
         (import_statement source: (string (string_fragment) @import.source))
       `);
 
@@ -38,6 +39,16 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
             name: funcName.node.text,
             startLine: funcDecl.node.startPosition.row + 1,
             endLine: funcDecl.node.endPosition.row + 1
+          });
+        }
+        const classDecl = match.captures.find((c) => c.name === 'class.decl');
+        const className = match.captures.find((c) => c.name === 'class.name');
+        if (classDecl && className) {
+          entities.push({
+            kind: 'class',
+            name: className.node.text,
+            startLine: classDecl.node.startPosition.row + 1,
+            endLine: classDecl.node.endPosition.row + 1
           });
         }
         const importSource = match.captures.find((c) => c.name === 'import.source');
