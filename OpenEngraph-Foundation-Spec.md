@@ -30,8 +30,7 @@ Developer -> AI Assistant -> OpenEngraph -> Engineering Knowledge Graph -> Repos
 - AI IDE
 - Copilot/Claude replacement
 - Chat application
-- Vector database
-- Semantic search product
+- A vector-DB-only product — embeddings are one input to a routed hybrid retrieval system, not the whole system
 
 ## Problem
 
@@ -46,7 +45,7 @@ OpenEngraph persists engineering knowledge instead.
 
 ## Core Principles
 
-- Deterministic before probabilistic
+- Deterministic first, probabilistic when structure runs out (enforced by the query router — see the differentiation design doc, Section 3)
 - Knowledge over context
 - Graph first
 - Local first
@@ -113,11 +112,24 @@ Always preserve engineering knowledge.
 
 ## Roadmap
 
-- Phase 1: Indexing + CLI + MCP
-- Phase 2: Knowledge Graph
-- Phase 3: Infrastructure Intelligence
-- Phase 4: Engineering Memory
-- Phase 5: Enterprise Collaboration
+### OSS Roadmap (Phase 1)
+
+- Structural graph (tree-sitter + LSP) + local hybrid embedding index + query router
+- CLI + local MCP server, self-hosted, zero mandatory external API dependency
+- Flagship language plugins (TypeScript, Python, Go) proving the plugin system
+
+### Enterprise Roadmap (Phases 2-5, post-OSS-traction)
+
+- Phase 2: Multi-repo org knowledge graph
+- Phase 3: Infrastructure Intelligence (Kubernetes, Docker, Terraform, etc.)
+- Phase 4: Org-scale Temporal/Incident Intelligence + cross-system connectors (Slack, Jira, Confluence, Datadog, Sentry)
+- Phase 5: Enterprise Collaboration — hosted service, SSO, multi-agent constitution workflow
+
+See `docs/superpowers/specs/2026-08-02-openengraph-differentiation-design.md` for full rationale.
+
+## Business Model
+
+Open-core. `core/`, `cli/`, `server/`, and `plugins/*` are Apache-2.0 and free. Multi-repo aggregation, cross-system connectors, org-scale temporal intelligence, and enterprise collaboration features live in a separate, closed-contribution `enterprise/` repository. A hosted enterprise offering follows once the OSS tier shows adoption traction — see the differentiation design doc for full reasoning.
 
 ## Repository Layout
 
