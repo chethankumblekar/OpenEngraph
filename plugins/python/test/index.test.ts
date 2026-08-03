@@ -35,4 +35,27 @@ class Greeter:
       expect.objectContaining({ kind: 'import', name: 'typing' })
     );
   });
+
+  it('records same-file calls and imported-module uses as references', async () => {
+    const source = `
+import os
+import json as j
+
+def greet(name):
+    return "hi " + name
+
+def welcome(name):
+    os.getcwd()
+    j.dumps({})
+    return greet(name)
+`;
+    const entities = await plugin.extract(source, 'greet.py');
+    const welcome = entities.find((e) => e.name === 'welcome');
+    expect(welcome?.references).toContain('greet');
+    expect(welcome?.references).toContain('os');
+    expect(welcome?.references).toContain('json');
+
+    const greet = entities.find((e) => e.name === 'greet');
+    expect(greet?.references ?? []).toEqual([]);
+  });
 });

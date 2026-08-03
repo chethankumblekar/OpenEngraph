@@ -30,8 +30,34 @@ func Greet(name string) string {
     expect(entities).toContainEqual(
       expect.objectContaining({ kind: 'class', name: 'Greeter' })
     );
+    // Import names are unquoted, matching the bare form the TypeScript and
+    // Python plugins produce (`node:fs`, `os`).
     expect(entities).toContainEqual(
-      expect.objectContaining({ kind: 'import', name: '"fmt"' })
+      expect.objectContaining({ kind: 'import', name: 'fmt' })
     );
+  });
+
+  it('records same-file calls and imported-package uses as references', async () => {
+    const source = `
+package main
+
+import "fmt"
+
+func Greet(name string) string {
+	return "hi " + name
+}
+
+func Welcome(name string) string {
+	fmt.Println(Greet(name))
+	return Greet(name)
+}
+`;
+    const entities = await plugin.extract(source, 'greet.go');
+    const welcome = entities.find((e) => e.name === 'Welcome');
+    expect(welcome?.references).toContain('Greet');
+    expect(welcome?.references).toContain('fmt');
+
+    const greet = entities.find((e) => e.kind === 'function' && e.name === 'Greet');
+    expect(greet?.references ?? []).toEqual([]);
   });
 });
