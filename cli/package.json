@@ -12,6 +12,7 @@
     "@openengraph/core": "*",
     "@openengraph/server": "*",
     "@openengraph/plugin-python": "*",
+    "@openengraph/plugin-go": "*",
     "commander": "^12.0.0"
   }
 }

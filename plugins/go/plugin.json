@@ -1,0 +1,6 @@
+{
+  "name": "@openengraph/plugin-go",
+  "language": "go",
+  "extensions": [".go"],
+  "grammar": "grammar/tree-sitter-go.wasm"
+}
