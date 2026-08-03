@@ -11,6 +11,7 @@
   "dependencies": {
     "@openengraph/core": "*",
     "@openengraph/server": "*",
+    "@openengraph/plugin-python": "*",
     "commander": "^12.0.0"
   }
 }

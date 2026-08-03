@@ -1,0 +1,18 @@
+{
+  "name": "@openengraph/plugin-python",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "dependencies": {
+    "web-tree-sitter": "^0.24.0"
+  },
+  "devDependencies": {
+    "tree-sitter-python": "^0.23.6"
+  },
+  "scripts": {
+    "postinstall": "node scripts/fetch-grammar.mjs",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}

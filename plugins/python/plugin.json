@@ -1,0 +1,6 @@
+{
+  "name": "@openengraph/plugin-python",
+  "language": "python",
+  "extensions": [".py"],
+  "grammar": "grammar/tree-sitter-python.wasm"
+}
