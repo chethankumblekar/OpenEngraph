@@ -1278,7 +1278,7 @@ This task's test exercises `@openengraph/core` and `@openengraph/plugin-typescri
 
 Run: `npm run build -w core && npm run build -w plugins/typescript`
 
-`cli/package.json`:
+`cli/package.json` — internal workspace dependencies use `"*"`, not `"workspace:*"`: this project uses npm workspaces (per Global Constraints), and `workspace:` is a pnpm/Yarn protocol npm doesn't understand — npm resolves any semver range (including the wildcard `"*"`) against the locally-linked workspace package automatically:
 ```json
 {
   "name": "@openengraph/cli",
@@ -1287,7 +1287,7 @@ Run: `npm run build -w core && npm run build -w plugins/typescript`
   "type": "module",
   "bin": { "openengraph": "dist/index.js" },
   "dependencies": {
-    "@openengraph/core": "workspace:*",
+    "@openengraph/core": "*",
     "commander": "^12.0.0"
   }
 }
@@ -1443,7 +1443,7 @@ Expected: FAIL — `server` package/module does not exist.
 
 - [ ] **Step 3: Scaffold the `server` package**
 
-`server/package.json` — `main`/`build` follow the same pattern as `core` (Task 1), since Task 11's `cli` imports this package by its bare name, not a subpath:
+`server/package.json` — `main`/`build` follow the same pattern as `core` (Task 1), since Task 11's `cli` imports this package by its bare name, not a subpath. Note the internal dependency uses npm's `"*"` wildcard for local workspace resolution, not the pnpm/Yarn-only `"workspace:*"` protocol, which npm does not support:
 ```json
 {
   "name": "@openengraph/server",
@@ -1453,7 +1453,7 @@ Expected: FAIL — `server` package/module does not exist.
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openengraph/core": "workspace:*",
+    "@openengraph/core": "*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.0"
   },
@@ -1687,7 +1687,7 @@ Expected: exits 0 and creates `plugins/python/dist/index.js`.
 
 - [ ] **Step 7: Add this plugin as an explicit `cli` dependency**
 
-In `cli/package.json`, add `"@openengraph/plugin-python": "workspace:*"` to `dependencies` (alongside the existing `@openengraph/plugin-typescript` entry). This is not strictly required for `cli/src/plugins.ts`'s `require.resolve` to find the package (npm workspaces hoist all workspace packages into the root `node_modules` regardless), but an explicit dependency documents the real relationship instead of relying on incidental hoisting — undeclared-but-resolvable dependencies are exactly what a code reviewer should flag. Run `npm install` at the repo root afterward.
+In `cli/package.json`, add `"@openengraph/plugin-python": "*"` to `dependencies` (alongside the existing `@openengraph/plugin-typescript` entry, using npm's local-resolution wildcard, not the pnpm-only `workspace:` protocol — see Task 9's note). This is not strictly required for `cli/src/plugins.ts`'s `require.resolve` to find the package (npm workspaces hoist all workspace packages into the root `node_modules` regardless), but an explicit dependency documents the real relationship instead of relying on incidental hoisting — undeclared-but-resolvable dependencies are exactly what a code reviewer should flag. Run `npm install` at the repo root afterward.
 
 - [ ] **Step 8: Run the cli test suite to confirm nothing broke**
 
@@ -1778,7 +1778,7 @@ Expected: exits 0 and creates `plugins/go/dist/index.js`.
 
 - [ ] **Step 7: Add this plugin as an explicit `cli` dependency**
 
-In `cli/package.json`, add `"@openengraph/plugin-go": "workspace:*"` to `dependencies` (alongside `@openengraph/plugin-typescript` and `@openengraph/plugin-python`). Same rationale as Task 12 Step 7. Run `npm install` at the repo root afterward.
+In `cli/package.json`, add `"@openengraph/plugin-go": "*"` to `dependencies` (alongside `@openengraph/plugin-typescript` and `@openengraph/plugin-python`). Same rationale as Task 12 Step 7 (npm's `"*"`, not the pnpm-only `workspace:` protocol). Run `npm install` at the repo root afterward.
 
 - [ ] **Step 8: Run the cli test suite to confirm nothing broke**
 
