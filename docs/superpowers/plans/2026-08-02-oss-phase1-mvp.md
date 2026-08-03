@@ -1546,16 +1546,28 @@ git commit -m "feat(server): add MCP server exposing graph, semantic, and hybrid
 
 - [ ] **Step 1: Write the failing test**
 
-`cli/test/commands/mcp.test.ts`:
+`cli/test/commands/mcp.test.ts` — uses an isolated temp directory, not `process.cwd()`: `runMcp` opens a real SQLite file via `openDatabase`, which requires its parent directory to exist and fails on a missing one, so the test must pre-create `.openengraph/` under a throwaway path rather than depending on (and potentially writing into) whatever directory the test happens to run from — the same isolation pattern already used in Tasks 3 and 9's tests:
 ```typescript
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runMcp } from '../../src/commands/mcp.js';
 import * as serverModule from '@openengraph/server';
 
 describe('runMcp', () => {
+  let testRepoPath: string;
+
+  afterEach(() => {
+    rmSync(testRepoPath, { recursive: true, force: true });
+  });
+
   it('opens the repo database and starts the stdio server', async () => {
+    testRepoPath = mkdtempSync(join(tmpdir(), 'oe-mcp-test-'));
+    mkdirSync(join(testRepoPath, '.openengraph'), { recursive: true });
+
     const spy = vi.spyOn(serverModule, 'startStdioServer').mockResolvedValue();
-    await runMcp(process.cwd());
+    await runMcp(testRepoPath);
     expect(spy).toHaveBeenCalledTimes(1);
     spy.mockRestore();
   });
