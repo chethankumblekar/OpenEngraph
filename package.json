@@ -2,7 +2,8 @@
   "name": "openengraph",
   "private": true,
   "type": "module",
-  "workspaces": ["core", "cli", "server", "plugins/*"],
+  "_workspacesNote": "Order matters: `npm run build --workspaces` builds in this declaration order, and cli/src/commands/mcp.ts imports @openengraph/server, which must already be compiled. Dependencies precede dependents.",
+  "workspaces": ["core", "server", "plugins/*", "cli"],
   "scripts": {
     "test": "vitest run",
     "build": "npm run build --workspaces --if-present"
