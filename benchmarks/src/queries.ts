@@ -57,11 +57,11 @@ export const BENCHMARK_QUESTIONS: BenchmarkQuestion[] = [
     resolve: (router) => router.semanticQuery('formatting a clean error message for the command line')
   },
   {
-    id: 'semantic-go-method-detection',
-    question: 'How does the Go plugin distinguish methods from functions?',
+    id: 'semantic-plugin-manifest-validation',
+    question: 'How does the plugin loader validate a plugin manifest before loading it?',
     mode: 'semantic',
-    grepTerms: ['method_declaration', 'function_declaration'],
-    resolve: (router) => router.semanticQuery('distinguishing a Go struct method from a top-level function')
+    grepTerms: ['validateManifest', 'loadPlugin'],
+    resolve: (router) => router.semanticQuery('validating a plugin manifest before loading a language plugin')
   },
   {
     id: 'hybrid-schema-dependents',
