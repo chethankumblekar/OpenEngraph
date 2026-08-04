@@ -13,6 +13,7 @@ const pluginDir = dirname(fileURLToPath(import.meta.url));
 const QUERY_SOURCE = `
   (function_declaration name: (identifier) @func.name) @func.decl
   (class_declaration name: (type_identifier) @class.name) @class.decl
+  (method_definition name: (property_identifier) @method.name) @method.decl
   (import_statement source: (string (string_fragment) @import.source)) @import.stmt
   (call_expression function: (identifier) @call.name)
   (call_expression
@@ -105,6 +106,23 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
             });
           }
 
+          const methodDecl = match.captures.find((c) => c.name === 'method.decl');
+          const methodName = match.captures.find((c) => c.name === 'method.name');
+          if (methodDecl && methodName) {
+            const entity: ExtractedEntity = {
+              kind: 'method',
+              name: methodName.node.text,
+              startLine: methodDecl.node.startPosition.row + 1,
+              endLine: methodDecl.node.endPosition.row + 1
+            };
+            entities.push(entity);
+            scopes.push({
+              entity,
+              startIndex: methodDecl.node.startIndex,
+              endIndex: methodDecl.node.endIndex
+            });
+          }
+
           const importSource = match.captures.find((c) => c.name === 'import.source');
           const importStmt = match.captures.find((c) => c.name === 'import.stmt');
           if (importSource) {
@@ -182,7 +200,10 @@ function importedBindings(importStmt: Parser.SyntaxNode): string[] {
  * resolve to neither are dropped there. This is the deliberate Phase 1 scope —
  * same-file, best-effort linking; real cross-file symbol resolution is
  * enterprise-roadmap work (design doc Section 6). One known consequence is that
- * `obj.greet()` and a same-file `function greet()` are indistinguishable here.
+ * `obj.greet()` still resolves by bare name, so it can match an unrelated
+ * same-file `function greet()` as readily as the intended `Obj.prototype.greet`
+ * method — kind alone (`'method'` vs `'function'`) narrows this but doesn't
+ * eliminate it without real type information.
  */
 function attachReferences(
   scopes: Scope[],

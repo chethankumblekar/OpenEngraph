@@ -9,7 +9,7 @@ describe('typescript plugin', () => {
     grammar: 'grammar/tree-sitter-typescript.wasm'
   });
 
-  it('extracts a top-level function, a class, and an import', async () => {
+  it('extracts a top-level function, a class, a method, and an import', async () => {
     const source = `
       import { readFileSync } from 'node:fs';
 
@@ -31,8 +31,37 @@ describe('typescript plugin', () => {
       expect.objectContaining({ kind: 'class', name: 'Greeter' })
     );
     expect(entities).toContainEqual(
+      expect.objectContaining({ kind: 'method', name: 'greet' })
+    );
+    expect(entities).toContainEqual(
       expect.objectContaining({ kind: 'import', name: 'node:fs' })
     );
+
+    // The method and the top-level function share a name but not a kind —
+    // exactly the conflation this test guards against.
+    const methodCount = entities.filter((e) => e.kind === 'method' && e.name === 'greet').length;
+    const functionCount = entities.filter((e) => e.kind === 'function' && e.name === 'greet').length;
+    expect(methodCount).toBe(1);
+    expect(functionCount).toBe(1);
+  });
+
+  it('attributes a call made inside a method to the method, not the enclosing class', async () => {
+    const source = `
+      export function helper(): number {
+        return 1;
+      }
+
+      export class Widget {
+        compute(): number {
+          return helper();
+        }
+      }
+    `;
+    const entities = await plugin.extract(source, 'widget.ts');
+    const compute = entities.find((e) => e.kind === 'method' && e.name === 'compute');
+    const widget = entities.find((e) => e.kind === 'class' && e.name === 'Widget');
+    expect(compute?.references).toContain('helper');
+    expect(widget?.references ?? []).not.toContain('helper');
   });
 
   it('records same-file function calls as references on the calling function', async () => {

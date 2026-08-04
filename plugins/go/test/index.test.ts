@@ -9,7 +9,7 @@ describe('go plugin', () => {
     grammar: 'grammar/tree-sitter-go.wasm'
   });
 
-  it('extracts a top-level function, a struct type, and an import', async () => {
+  it('extracts a top-level function, a struct type, a method, and an import', async () => {
     const source = `
 package main
 
@@ -22,10 +22,17 @@ type Greeter struct {
 func Greet(name string) string {
 	return "hi " + name
 }
+
+func (g *Greeter) Greet() string {
+	return Greet(g.Name)
+}
 `;
     const entities = await plugin.extract(source, 'greet.go');
     expect(entities).toContainEqual(
       expect.objectContaining({ kind: 'function', name: 'Greet' })
+    );
+    expect(entities).toContainEqual(
+      expect.objectContaining({ kind: 'method', name: 'Greet' })
     );
     expect(entities).toContainEqual(
       expect.objectContaining({ kind: 'class', name: 'Greeter' })
@@ -35,6 +42,33 @@ func Greet(name string) string {
     expect(entities).toContainEqual(
       expect.objectContaining({ kind: 'import', name: 'fmt' })
     );
+
+    // The receiver method and the top-level function share a name but not a
+    // kind -- Go's method_declaration is a distinct node from
+    // function_declaration, so this must not conflate them.
+    const methodCount = entities.filter((e) => e.kind === 'method' && e.name === 'Greet').length;
+    const functionCount = entities.filter((e) => e.kind === 'function' && e.name === 'Greet').length;
+    expect(methodCount).toBe(1);
+    expect(functionCount).toBe(1);
+  });
+
+  it('attributes a call made inside a method to the method, not left unattributed', async () => {
+    const source = `
+package main
+
+func helper() int {
+	return 1
+}
+
+type Widget struct{}
+
+func (w *Widget) Compute() int {
+	return helper()
+}
+`;
+    const entities = await plugin.extract(source, 'widget.go');
+    const compute = entities.find((e) => e.kind === 'method' && e.name === 'Compute');
+    expect(compute?.references).toContain('helper');
   });
 
   it('records same-file calls and imported-package uses as references', async () => {

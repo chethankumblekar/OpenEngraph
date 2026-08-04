@@ -12,6 +12,7 @@ const pluginDir = dirname(fileURLToPath(import.meta.url));
 // optional `name` alias field plus the quoted `path`.
 const QUERY_SOURCE = `
   (function_declaration name: (identifier) @func.name) @func.decl
+  (method_declaration name: (field_identifier) @method.name) @method.decl
   (type_declaration (type_spec name: (type_identifier) @class.name type: (struct_type)) @class.decl)
   (import_spec path: (interpreted_string_literal) @import.source) @import.spec
   (call_expression function: (identifier) @call.name)
@@ -89,6 +90,23 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
             });
           }
 
+          const methodDecl = match.captures.find((c) => c.name === 'method.decl');
+          const methodName = match.captures.find((c) => c.name === 'method.name');
+          if (methodDecl && methodName) {
+            const entity: ExtractedEntity = {
+              kind: 'method',
+              name: methodName.node.text,
+              startLine: methodDecl.node.startPosition.row + 1,
+              endLine: methodDecl.node.endPosition.row + 1
+            };
+            entities.push(entity);
+            scopes.push({
+              entity,
+              startIndex: methodDecl.node.startIndex,
+              endIndex: methodDecl.node.endIndex
+            });
+          }
+
           const classDecl = match.captures.find((c) => c.name === 'class.decl');
           const className = match.captures.find((c) => c.name === 'class.name');
           if (classDecl && className) {
@@ -152,10 +170,6 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
  * imported package or are left for `buildGraph` to match against another entity
  * in the same file; anything else is dropped there. Same-file, best-effort
  * linking is the deliberate Phase 1 scope (design doc Section 6).
- *
- * Known gap: `method_declaration` is not extracted as an entity (methods and
- * functions are still conflated repo-wide), so calls made inside a Go method
- * body have no enclosing scope here and produce no edges.
  */
 function attachReferences(
   scopes: Scope[],

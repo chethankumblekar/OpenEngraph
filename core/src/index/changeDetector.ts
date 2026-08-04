@@ -47,7 +47,10 @@ export function detectChangedFiles(repoPath: string, db: Database.Database): Cha
     const out = execFileSync('git', ['hash-object', ...batch], {
       cwd: repoPath,
       encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 64
+      maxBuffer: 1024 * 1024 * 64,
+      // Same reasoning as the git ls-files call above: capture stderr onto the
+      // thrown error instead of letting it leak straight to our own stderr.
+      stdio: ['ignore', 'pipe', 'pipe']
     })
       .split('\n')
       .filter(Boolean);

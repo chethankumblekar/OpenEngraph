@@ -69,7 +69,7 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
           const funcName = match.captures.find((c) => c.name === 'func.name');
           if (funcDecl && funcName) {
             const entity: ExtractedEntity = {
-              kind: 'function',
+              kind: isMethodOfClass(funcDecl.node) ? 'method' : 'function',
               name: funcName.node.text,
               startLine: funcDecl.node.startPosition.row + 1,
               endLine: funcDecl.node.endPosition.row + 1
@@ -134,6 +134,24 @@ export default function createPlugin(manifest: PluginManifest): LanguagePlugin {
       }
     }
   };
+}
+
+/**
+ * Python's grammar has no distinct node for a class method — `def` inside a
+ * class body produces the same `function_definition` node as a top-level
+ * `def`. Distinguish them by walking up from the function to whichever comes
+ * first: a `class_definition` (it's a method) or another `function_definition`
+ * (it's a nested/closure function inside a function body, not a method, even
+ * if that outer function is itself a method).
+ */
+function isMethodOfClass(funcDefNode: Parser.SyntaxNode): boolean {
+  let current = funcDefNode.parent;
+  while (current) {
+    if (current.type === 'function_definition') return false;
+    if (current.type === 'class_definition') return true;
+    current = current.parent;
+  }
+  return false;
 }
 
 /**
