@@ -21,6 +21,10 @@ OpenEngraph's OSS core is the first to combine both **and** run the embedding st
 
 A pure structural graph answers "what calls this function" precisely but cannot answer "find the code that handles rate limiting" unless something is literally named that. A pure embeddings index answers fuzzy queries but can't reliably answer precise structural questions ("what depends on this") — it's why every serious commercial player (Cody, Augment, Cursor) already runs both. No OSS local-first tool does yet.
 
+## Benchmark
+
+`benchmarks/RESULTS.md` (run via `npm run run -w benchmarks`) measures this directly: token cost of answering real questions about this repository through `QueryRouter` versus a simulated naive-agent baseline (grep for keywords, read the matching files in full). As of the last run, average token reduction across 8 questions spanning all three retrieval modes was **83.9%**.
+
 ## Explicit non-goal
 
 We are not trying to out-feature Unblocked or Augment on day one — matching their multi-repo, multi-source, org-scale aggregation is enterprise-roadmap scope (see the differentiation design doc, Section 6). Phase 1 wins the OSS layer they do not compete in: a free, local-first, hybrid-retrieval engine for a single repo. The enterprise tier extends upward from that adopted base, rather than trying to compete top-down from day one.
