@@ -79,9 +79,18 @@ export const BENCHMARK_QUESTIONS: BenchmarkQuestion[] = [
   },
   {
     id: 'hybrid-mcp-exposure',
-    question: 'What does the MCP server expose to AI assistants?',
+    // Reworded from "What does the MCP server expose to AI assistants?". That
+    // phrasing's seed search was dominated by `import` nodes that merely
+    // mention "mcp" in their module specifier, pushing the real answer
+    // (`createMcpServer`) to rank 8 (0.2831) -- below the topK=5 cutoff of
+    // 0.3006 -- so the published answer contained no `server/` node at all.
+    // Naming the registered tools instead ranks `createMcpServer` first
+    // (0.5049), followed by the three `QueryRouter` methods each tool
+    // delegates to.
+    question: 'How does the MCP server expose graph, semantic, and hybrid queries as tools?',
     mode: 'hybrid',
     grepTerms: ['createMcpServer', 'graph_query', 'semantic_search', 'hybrid_query'],
-    resolve: (router) => router.hybridQuery('MCP tools exposed to AI assistants for querying the graph')
+    resolve: (router) =>
+      router.hybridQuery('creating a server that registers graph query, semantic search and hybrid query tools')
   }
 ];
