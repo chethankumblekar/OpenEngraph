@@ -1,0 +1,20 @@
+{
+  "name": "@openengraph/benchmarks",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@openengraph/core": "*",
+    "better-sqlite3": "^13.0.2",
+    "gpt-tokenizer": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "run": "npm run build && node dist/run.js"
+  }
+}
