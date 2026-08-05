@@ -36,6 +36,24 @@ async function structuralAnswer(db: Database.Database, router: QueryRouter, name
  * below and commit 5325f01 for the Go-plugin case. RESULTS.md derives its
  * "neither is the top-scoring row" claim from this list at write time, so the
  * disclosure cannot silently go stale if the numbers move.
+ *
+ * The retired phrasings (recoverable in full from `git show b56dab8:` and
+ * `git show 5325f01:` on this file) were re-measured against the current
+ * corpus at commit 84e4333, using the same `computeBaseline` and `QueryRouter`
+ * this file drives, to support the effect-on-the-headline claim in RESULTS.md:
+ *
+ * - 'How does the Go plugin distinguish methods from functions?'
+ *   grep ['method_declaration', 'function_declaration'] -> 5 files, 1,616,890
+ *   baseline tokens, 242 answer tokens = 100.0%. The baseline is that large
+ *   because those terms occur inside the tree-sitter `.wasm` grammar binaries,
+ *   which is exactly why the retired row's near-perfect score was not
+ *   meaningful. Its replacement scores 78.4%.
+ * - 'What does the MCP server expose to AI assistants?'
+ *   same grep terms as today -> 675 baseline tokens, 513 answer tokens = 24.0%,
+ *   versus 33.2% for the current phrasing.
+ *
+ * Substituting both retired rows back in yields an 85.5% average against the
+ * 83.9% published today: the revisions cost 1.6 points net.
  */
 export const REVISED_QUESTION_IDS = ['semantic-plugin-manifest-validation', 'hybrid-mcp-exposure'];
 
