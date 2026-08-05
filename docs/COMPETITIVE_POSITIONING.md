@@ -23,7 +23,7 @@ A pure structural graph answers "what calls this function" precisely but cannot 
 
 ## Benchmark
 
-`benchmarks/RESULTS.md` (run via `npm run run -w benchmarks`) measures this directly: token cost of answering real questions about this repository through `QueryRouter` versus a simulated naive-agent baseline (grep for keywords, read the matching files in full). As of the last run, average token reduction across 8 questions spanning all three retrieval modes was **83.9%**.
+`benchmarks/RESULTS.md` (run via `npm run build` at the repo root, then `npm run run -w benchmarks`) measures this directly: token cost of answering real questions about this repository through `QueryRouter` versus a simulated naive-agent baseline (grep for keywords, read the matching files in full). As of the last run, average token reduction across 8 questions spanning all three retrieval modes was **83.9%**.
 
 ## Explicit non-goal
 
