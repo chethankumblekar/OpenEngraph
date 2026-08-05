@@ -27,6 +27,18 @@ async function structuralAnswer(db: Database.Database, router: QueryRouter, name
   return router.structuralQuery(nodeId);
 }
 
+/**
+ * Questions whose wording was revised after an initial benchmark run, disclosed
+ * in RESULTS.md rather than left to be discovered in the git history. Both were
+ * changed because the initial phrasing's seed search ranked the real answer
+ * outside the topK cutoff, so the published answer omitted the code that
+ * actually answered the question -- see the comment on `hybrid-mcp-exposure`
+ * below and commit 5325f01 for the Go-plugin case. RESULTS.md derives its
+ * "neither is the top-scoring row" claim from this list at write time, so the
+ * disclosure cannot silently go stale if the numbers move.
+ */
+export const REVISED_QUESTION_IDS = ['semantic-plugin-manifest-validation', 'hybrid-mcp-exposure'];
+
 export const BENCHMARK_QUESTIONS: BenchmarkQuestion[] = [
   {
     id: 'structural-hybrid-query-calls',
