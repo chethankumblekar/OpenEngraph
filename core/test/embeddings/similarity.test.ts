@@ -78,4 +78,46 @@ describe('searchSimilar', () => {
     expect(results).toHaveLength(1);
     expect(results[0].nodeId).toBe('n1');
   });
+
+  it('returns the same topK winners for tied scores regardless of row insertion/deletion history', () => {
+    // Reproduces GitHub issue #3: incremental re-indexing can disagree with a
+    // full clean re-index for the same tree. Root cause: `SELECT ... FROM
+    // chunks` below has no ORDER BY, so SQLite's row order is whatever the
+    // table's physical/rowid layout happens to be; ties are then broken by
+    // Array.prototype.sort's stability, i.e. by that incidental row order.
+    // Real-world equivalent: multiple files sharing an identical line (e.g.
+    // the same `import` statement) embed to byte-identical vectors, so their
+    // cosine similarity against any query ties exactly.
+    const db = openDatabase(':memory:');
+    applySchema(db);
+
+    const tie = toBlob([1, 0, 0]);
+    for (const id of ['n1', 'n2', 'n3', 'n4']) {
+      db.prepare('INSERT INTO nodes (id, kind, name, file, start_line, end_line) VALUES (?, ?, ?, ?, ?, ?)').run(
+        id, 'function', id, `${id}.ts`, 1, 1
+      );
+      db.prepare('INSERT INTO chunks (id, node_id, text, embedding) VALUES (?, ?, ?, ?)').run(
+        `c-${id}`, id, 'same text everywhere', tie
+      );
+    }
+
+    const fullBuildWinners = searchSimilar(db, new Float32Array([1, 0, 0]), 2)
+      .map((r) => r.nodeId)
+      .sort();
+
+    // Simulate an incremental re-index of n1's file: its chunk row is
+    // deleted and re-inserted (same content, same score, new physical
+    // position) — exactly what `removeFileFromGraph` + `buildGraph` do to a
+    // single changed file, leaving the other three files' rows untouched.
+    db.prepare('DELETE FROM chunks WHERE id = ?').run('c-n1');
+    db.prepare('INSERT INTO chunks (id, node_id, text, embedding) VALUES (?, ?, ?, ?)').run(
+      'c-n1', 'n1', 'same text everywhere', tie
+    );
+
+    const incrementalWinners = searchSimilar(db, new Float32Array([1, 0, 0]), 2)
+      .map((r) => r.nodeId)
+      .sort();
+
+    expect(incrementalWinners).toEqual(fullBuildWinners);
+  });
 });
