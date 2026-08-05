@@ -4,7 +4,7 @@ A local-first engineering knowledge graph: index a repository into a structural 
 
 ## Why
 
-AI coding assistants re-read the same files and rebuild the same context every session. OpenEngraph persists that context as a queryable graph instead. On this repository's own codebase, that cuts the token cost of answering real questions by an average of **83.9%** compared to the naive alternative (grep for keywords, read the matching files in full) — see [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) for the full breakdown and methodology.
+AI coding assistants re-read the same files and rebuild the same context every session. OpenEngraph persists that context as a queryable graph instead. On this repository's own codebase, that cuts the token cost of answering real questions by an average of **84.1%** compared to the naive alternative (grep for keywords, read the matching files in full) — see [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) for the full breakdown and methodology.
 
 ## Install & build
 
