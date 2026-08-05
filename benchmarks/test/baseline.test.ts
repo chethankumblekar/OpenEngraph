@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeBaseline } from '../src/baseline.js';
+import { computeBaseline, computeUnfilteredBaseline } from '../src/baseline.js';
 
 describe('computeBaseline', () => {
   let repoRoot: string;
@@ -62,5 +62,27 @@ describe('computeBaseline', () => {
     const result = computeBaseline(repoRoot, ['embedText']);
 
     expect(result.files).toEqual(['src.ts']);
+  });
+});
+
+describe('computeUnfilteredBaseline', () => {
+  let repoRoot: string;
+
+  afterEach(() => rmSync(repoRoot, { recursive: true, force: true }));
+
+  it('includes docs/, Markdown, and benchmarks/ that computeBaseline excludes', () => {
+    repoRoot = mkdtempSync(join(tmpdir(), 'oe-baseline-test-'));
+    execSync('git init -q', { cwd: repoRoot });
+    mkdirSync(join(repoRoot, 'docs'));
+    writeFileSync(join(repoRoot, 'src.ts'), 'export function embedText() { return 1; }');
+    writeFileSync(join(repoRoot, 'docs/plan.md'), 'the plan mentions embedText everywhere');
+    execSync('git add -A', { cwd: repoRoot });
+
+    const filtered = computeBaseline(repoRoot, ['embedText']);
+    const unfiltered = computeUnfilteredBaseline(repoRoot, ['embedText']);
+
+    expect(filtered.files).toEqual(['src.ts']);
+    expect(unfiltered.files.sort()).toEqual(['docs/plan.md', 'src.ts']);
+    expect(unfiltered.tokenCount).toBeGreaterThan(filtered.tokenCount);
   });
 });

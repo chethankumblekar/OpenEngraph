@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { openDatabase } from '@openengraph/core/storage/db.js';
 import { QueryRouter } from '@openengraph/core/query/router.js';
 import { countTokens } from './tokenCount.js';
-import { computeBaseline, BASELINE_EXCLUDED_PATHSPECS } from './baseline.js';
+import { computeBaseline, computeUnfilteredBaseline, BASELINE_EXCLUDED_PATHSPECS } from './baseline.js';
 import { BENCHMARK_QUESTIONS, REVISED_QUESTION_IDS } from './queries.js';
 
 /**
@@ -30,6 +30,8 @@ interface RowResult {
   openEngraphTokens: number;
   baselineFileCount: number;
   baselineTokens: number;
+  /** Same grep terms with no path exclusions — only used to derive the live "how much did excluding docs/benchmarks shrink this?" figures below, never published as its own column. */
+  unfilteredBaselineTokens: number;
   reductionPct: number;
 }
 
@@ -83,6 +85,7 @@ async function main(): Promise<void> {
       );
     }
 
+    const unfilteredBaselineTokens = computeUnfilteredBaseline(repoRoot, q.grepTerms).tokenCount;
     const reductionPct = Math.round((1 - openEngraphTokens / baselineTokens) * 1000) / 10;
 
     rows.push({
@@ -92,6 +95,7 @@ async function main(): Promise<void> {
       openEngraphTokens,
       baselineFileCount: baseline.files.length,
       baselineTokens,
+      unfilteredBaselineTokens,
       reductionPct
     });
     console.log(`${q.id}: OpenEngraph=${openEngraphTokens} baseline=${baselineTokens} reduction=${reductionPct}%`);
@@ -102,16 +106,28 @@ async function main(): Promise<void> {
 }
 
 /**
- * Renders the run-dependent half of the question-provenance disclosure from the
- * run's own numbers -- where the revised rows rank, and whether either of them
- * is the top-scoring row -- so that claim is re-derived on every run instead of
- * being prose that could quietly stop being true as the corpus changes.
+ * The question-provenance disclosure. Counts (`N of M revised`, `K
+ * untouched`) are always derived from `REVISED_QUESTION_IDS.length` and
+ * `rows.length`, never hand-typed, so they can't silently go stale if that
+ * list ever changes. The specific historical narrative below it (the Go and
+ * MCP rewordings, their retired scores, commit `84e4333`) documents one
+ * specific past event and is not re-derivable in general -- there is no way
+ * to recompute "what would a retired question score today" without the
+ * retired code, so if a *third* question is ever revised, this paragraph's
+ * narrative sentences need a manual update alongside `REVISED_QUESTION_IDS`,
+ * same as any other changelog entry. What's guaranteed to stay accurate on
+ * its own is the placement/ranking claim, computed fresh from this run.
  */
-function describeRevisedRows(rows: RowResult[]): string {
+function describeQuestionProvenance(rows: RowResult[], avgReduction: number): string {
+  const revisedCount = REVISED_QUESTION_IDS.length;
+  const untouchedCount = rows.length - revisedCount;
+
+  if (revisedCount === 0) {
+    return `Question provenance: none of the ${rows.length} questions below have been revised since they were first written.`;
+  }
+
   const byReduction = [...rows].sort((a, b) => b.reductionPct - a.reductionPct);
   const revised = byReduction.filter((r) => REVISED_QUESTION_IDS.includes(r.id));
-  if (revised.length === 0) return '';
-
   const ranks = revised.map((r) => byReduction.indexOf(r) + 1);
   const allAtBottom = ranks.every((rank) => rank > rows.length - revised.length);
   const placement = allAtBottom
@@ -120,17 +136,45 @@ function describeRevisedRows(rows: RowResult[]): string {
 
   const top = byReduction[0];
   const topIsRevised = REVISED_QUESTION_IDS.includes(top.id);
-  return (
-    `In this run the two revised questions are ${placement} ` +
+  const rankingClaim =
+    `In this run the ${revisedCount === 1 ? 'revised question is' : `${revisedCount} revised questions are`} ${placement} ` +
     `(${revised.map((r) => `${r.reductionPct}%`).join(' and ')}), and the top-scoring row ` +
     `(${top.reductionPct}%, "${top.question}") is ` +
-    `${topIsRevised ? '**one of the revised questions**.' : 'one of the six untouched questions.'}`
+    `${topIsRevised ? '**one of the revised questions**.' : `one of the ${untouchedCount} untouched questions.`}`;
+
+  return (
+    `Question provenance: ${revisedCount} of the ${rows.length} questions below were revised after an initial run, ` +
+    'disclosed here rather than left to be found in the git history. In both cases the initial phrasing produced a ' +
+    'misleading *answer*, not an inconvenient percentage: the real answer ranked just outside the top-K cutoff used ' +
+    'to seed semantic retrieval, so the published answer omitted the code that actually answers the question (the ' +
+    'Go plugin\'s `extract()` at rank 6 of the "how does the Go plugin distinguish methods from functions" seed ' +
+    'search, and `createMcpServer` at rank 8 of the "what does the MCP server expose to AI assistants" one). Both ' +
+    'were reworded for answer relevance, not for score, and re-measuring the retired phrasings against this corpus ' +
+    '(at commit `84e4333`, using the same `computeBaseline` and `QueryRouter` the table below uses) shows the swaps ' +
+    'cost more than they gained. The retired Go question scores **100%** today -- its grep terms ' +
+    '`method_declaration`/`function_declaration` match the tree-sitter `.wasm` grammars, giving it a 1.6M-token ' +
+    'baseline -- against 78.4% for the plugin-manifest question that replaced it. The MCP rewording moved its own ' +
+    'row the other way, 24% to 33.2%, by returning an answer that actually contains `createMcpServer`. Net across ' +
+    `both, the revisions lower the headline from 85.5% to the ${avgReduction}% published here. ` +
+    `${rankingClaim} The other ${untouchedCount} question${untouchedCount === 1 ? '' : 's'} ${
+      untouchedCount === 1 ? 'is' : 'are'
+    } unchanged since ${untouchedCount === 1 ? 'it was' : 'they were'} first written.`
   );
 }
 
 function writeResults(rows: RowResult[], commit: string, dirty: boolean): void {
   const avgReduction = Math.round((rows.reduce((sum, r) => sum + r.reductionPct, 0) / rows.length) * 10) / 10;
   const date = new Date().toISOString().slice(0, 10);
+
+  // Computed from this run's actual numbers, not hand-typed, so this figure
+  // can't silently understate itself as the corpus grows (it did: an earlier
+  // draft said "up to 40x", measured against a smaller docs/ tree than the
+  // one any later run -- including this one -- actually has).
+  const totalFiltered = rows.reduce((sum, r) => sum + r.baselineTokens, 0);
+  const totalUnfiltered = rows.reduce((sum, r) => sum + r.unfilteredBaselineTokens, 0);
+  const aggregateContaminationRatio = Math.round((totalUnfiltered / totalFiltered) * 10) / 10;
+  const maxRowContaminationRatio =
+    Math.round(Math.max(...rows.map((r) => r.unfilteredBaselineTokens / r.baselineTokens)) * 10) / 10;
 
   const lines = [
     '# Token-Reduction Benchmark Results',
@@ -143,11 +187,9 @@ function writeResults(rows: RowResult[], commit: string, dirty: boolean): void {
     '',
     `Baseline corpus: source files only. The grep runs with the pathspec exclusions \`${BASELINE_EXCLUDED_PATHSPECS.join(
       '` `'
-    )}\`, so this project's own Markdown -- design docs, plans, specs, \`README.md\` -- and the benchmark package itself are **not** counted. Those files are internal planning prose rather than code an agent would read to answer these questions; counting them inflated the measured baseline ~6x on aggregate (up to 40x on individual rows). Excluding \`benchmarks/\` also keeps runs idempotent, since \`benchmarks/RESULTS.md\` is git-tracked and contains every grep term used here.`,
+    )}\`, so this project's own Markdown -- design docs, plans, specs, \`README.md\` -- and the benchmark package itself are **not** counted. Those files are internal planning prose rather than code an agent would read to answer these questions; counting them would have inflated the measured baseline ~${aggregateContaminationRatio}x on aggregate (up to ${maxRowContaminationRatio}x on individual rows) in this run. Excluding \`benchmarks/\` also keeps runs idempotent, since \`benchmarks/RESULTS.md\` is git-tracked and contains every grep term used here.`,
     '',
-    `Question provenance: two of the eight questions below were revised after an initial run, disclosed here rather than left to be found in the git history. In both cases the initial phrasing produced a misleading *answer*, not an inconvenient percentage: the real answer ranked just outside the top-K cutoff used to seed semantic retrieval, so the published answer omitted the code that actually answers the question (the Go plugin's \`extract()\` at rank 6 of the "how does the Go plugin distinguish methods from functions" seed search, and \`createMcpServer\` at rank 8 of the "what does the MCP server expose to AI assistants" one). Both were reworded for answer relevance, not for score, and re-measuring the retired phrasings against this corpus (at commit \`84e4333\`, using the same \`computeBaseline\` and \`QueryRouter\` the table below uses) shows the swaps cost more than they gained. The retired Go question scores **100%** today -- its grep terms \`method_declaration\`/\`function_declaration\` match the tree-sitter \`.wasm\` grammars, giving it a 1.6M-token baseline -- against 78.4% for the plugin-manifest question that replaced it. The MCP rewording moved its own row the other way, 24% to 33.2%, by returning an answer that actually contains \`createMcpServer\`. Net across both, the revisions lower the headline from 85.5% to the 83.9% published here. ${describeRevisedRows(
-      rows
-    )} The other six questions are unchanged since they were first written.`,
+    describeQuestionProvenance(rows, avgReduction),
     '',
     '| Question | Mode | OpenEngraph tokens | Baseline files | Baseline tokens | Reduction |',
     '|---|---|---|---|---|---|',

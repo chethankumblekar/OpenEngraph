@@ -29,9 +29,9 @@ export interface BaselineResult {
  */
 export const BASELINE_EXCLUDED_PATHSPECS = [':!docs', ':!*.md', ':!benchmarks'];
 
-function grepMatchingFiles(repoRoot: string, term: string): string[] {
+function grepMatchingFiles(repoRoot: string, term: string, excludePathspecs: string[]): string[] {
   try {
-    const out = execFileSync('git', ['grep', '-l', '-i', term, '--', '.', ...BASELINE_EXCLUDED_PATHSPECS], {
+    const out = execFileSync('git', ['grep', '-l', '-i', term, '--', '.', ...excludePathspecs], {
       cwd: repoRoot,
       encoding: 'utf8',
       maxBuffer: 1024 * 1024 * 16
@@ -44,10 +44,10 @@ function grepMatchingFiles(repoRoot: string, term: string): string[] {
   }
 }
 
-export function computeBaseline(repoRoot: string, grepTerms: string[]): BaselineResult {
+function computeBaselineWithExclusions(repoRoot: string, grepTerms: string[], excludePathspecs: string[]): BaselineResult {
   const fileSet = new Set<string>();
   for (const term of grepTerms) {
-    for (const file of grepMatchingFiles(repoRoot, term)) {
+    for (const file of grepMatchingFiles(repoRoot, term, excludePathspecs)) {
       fileSet.add(file);
     }
   }
@@ -59,4 +59,20 @@ export function computeBaseline(repoRoot: string, grepTerms: string[]): Baseline
   }
 
   return { files, tokenCount };
+}
+
+/** The published baseline: source only, per `BASELINE_EXCLUDED_PATHSPECS`. */
+export function computeBaseline(repoRoot: string, grepTerms: string[]): BaselineResult {
+  return computeBaselineWithExclusions(repoRoot, grepTerms, BASELINE_EXCLUDED_PATHSPECS);
+}
+
+/**
+ * The same baseline with no exclusions applied — used only to measure, at
+ * run time, how much the exclusions actually shrink the baseline (see the
+ * "Baseline corpus" disclosure in `run.ts`). Never published as a result
+ * row itself; a live comparison point so that disclosure can't go stale the
+ * way a hardcoded "~Nx" figure would as the corpus grows.
+ */
+export function computeUnfilteredBaseline(repoRoot: string, grepTerms: string[]): BaselineResult {
+  return computeBaselineWithExclusions(repoRoot, grepTerms, []);
 }
