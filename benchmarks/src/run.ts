@@ -58,8 +58,13 @@ async function main(): Promise<void> {
   // Captured before indexing so RESULTS.md records exactly the tree the
   // numbers were measured on. A dirty tree is recorded explicitly rather than
   // silently publishing a SHA that does not correspond to the code that ran.
+  // RESULTS.md itself is excluded from this check: it is this script's own
+  // output, always about to be overwritten by the current run, so it being
+  // uncommitted relative to its *previous* content is not a reproducibility
+  // problem -- only uncommitted changes to the code that produced the
+  // numbers are.
   const commit = git(['rev-parse', 'HEAD']);
-  const dirty = git(['status', '--porcelain']).length > 0;
+  const dirty = git(['status', '--porcelain', '--', '.', ':!benchmarks/RESULTS.md']).length > 0;
 
   console.log(`Indexing ${repoRoot} via the real CLI...`);
   execFileSync('node', [cliEntry, 'index', repoRoot], { cwd: repoRoot, stdio: 'inherit' });
