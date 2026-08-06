@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase } from '@openengraph/core/storage/db.js';
@@ -209,6 +209,45 @@ function writeResults(rows: RowResult[], commit: string, dirty: boolean): void {
 
   writeFileSync(join(repoRoot, 'benchmarks', 'RESULTS.md'), lines.join('\n'));
   console.log(`\nWrote benchmarks/RESULTS.md (average reduction: ${avgReduction}%)`);
+
+  syncPublishedNumber(avgReduction, rows.length);
+}
+
+/**
+ * README.md and docs/COMPETITIVE_POSITIONING.md both quote the headline
+ * average inline. Previously that meant a human had to notice the number
+ * moved and hand-edit both files after every run -- easy to forget, and the
+ * exact failure mode this benchmark itself exists to avoid (a published
+ * claim silently drifting from what the code actually measures). Both
+ * patterns below are anchored to specific surrounding text, not a bare "any
+ * bolded percentage", so this can't accidentally rewrite an unrelated
+ * number if either doc changes shape later -- it throws instead of guessing.
+ */
+function syncPublishedNumber(avgReduction: number, questionCount: number): void {
+  const targets: { path: string; pattern: RegExp; replacement: string }[] = [
+    {
+      path: join(repoRoot, 'README.md'),
+      pattern: /(an average of \*\*)[\d.]+(%\*\* compared)/,
+      replacement: `$1${avgReduction}$2`
+    },
+    {
+      path: join(repoRoot, 'docs', 'COMPETITIVE_POSITIONING.md'),
+      pattern: /(across )\d+( questions spanning all three retrieval modes was \*\*)[\d.]+(%\*\*\.)/,
+      replacement: `$1${questionCount}$2${avgReduction}$3`
+    }
+  ];
+
+  for (const { path, pattern, replacement } of targets) {
+    const content = readFileSync(path, 'utf8');
+    if (!pattern.test(content)) {
+      throw new Error(
+        `syncPublishedNumber: expected pattern not found in ${path}. The doc's wording around the published ` +
+          'number has changed -- update this script\'s pattern to match rather than silently failing to sync it.'
+      );
+    }
+    const updated = content.replace(pattern, replacement);
+    if (updated !== content) writeFileSync(path, updated);
+  }
 }
 
 main().catch((err) => {
