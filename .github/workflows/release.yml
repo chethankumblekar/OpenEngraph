@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `gh release create --generate-notes` can list
+          # every commit since the previous tag, not just the tagged commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache local embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.openengraph/models
+          key: openengraph-embedding-model-Xenova-all-MiniLM-L6-v2
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+      # Deliberately does not publish to the public npm registry: claiming
+      # the @openengraph/* scope there is a one-way decision (namespace
+      # ownership, yanking is not really possible once installed) that
+      # belongs to a human, not an automated release job. This step creates
+      # a GitHub Release (source + notes) only.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

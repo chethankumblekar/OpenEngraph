@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # The local embedding model (~90MB) downloads once on first use and is
+      # cached under ~/.openengraph/models -- without this, core's embedding
+      # tests and the e2e test would re-download it on every CI run.
+      - name: Cache local embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.openengraph/models
+          key: openengraph-embedding-model-Xenova-all-MiniLM-L6-v2
+
+      - run: npm ci
+
+      # Dependency order matters: core and server must compile before cli,
+      # which imports both (see the root package.json's _workspacesNote).
+      # `npm run build` at the root already respects the declared workspace
+      # order, so no manual sequencing is needed here.
+      - run: npm run build
+
+      - run: npm test

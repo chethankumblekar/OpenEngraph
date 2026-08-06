@@ -1,0 +1,54 @@
+name: Weekly Benchmark Refresh
+
+on:
+  schedule:
+    # Monday 04:30 UTC -- deliberately offset an hour from the separate
+    # cloud-agent routine that refreshes docs/COMPETITIVE_FEATURE_MATRIX.md
+    # (Monday 03:30 UTC), so the two scheduled pushes to master never race.
+    - cron: '30 4 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache local embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.openengraph/models
+          key: openengraph-embedding-model-Xenova-all-MiniLM-L6-v2
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Re-index this repo and re-run the benchmark
+        run: |
+          rm -rf .openengraph
+          node benchmarks/dist/run.js
+
+      # run.ts's syncPublishedNumber() already keeps README.md and
+      # docs/COMPETITIVE_POSITIONING.md in sync with whatever it just wrote
+      # to benchmarks/RESULTS.md, so this step just needs to commit whatever
+      # changed, without any separate sed/parsing logic here.
+      - name: Commit and push if the numbers changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- benchmarks/RESULTS.md README.md docs/COMPETITIVE_POSITIONING.md; then
+            echo "No change in benchmark results this week."
+            exit 0
+          fi
+          git add benchmarks/RESULTS.md README.md docs/COMPETITIVE_POSITIONING.md
+          git commit -m "chore(benchmarks): weekly automated refresh"
+          git pull --rebase origin master
+          git push origin master
